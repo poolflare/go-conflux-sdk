@@ -29,6 +29,7 @@ type Client struct {
 	nodeURL        string
 	rpcRequester   rpcRequester
 	networkID      uint32
+	passphrase     string
 }
 
 // ClientOption for set keystore path and flags for retry
@@ -58,6 +59,14 @@ func NewClientWithRPCRequester(rpcRequester rpcRequester) (*Client, error) {
 	return &Client{
 		rpcRequester: rpcRequester,
 	}, nil
+}
+
+func NewClientWithPassphrase(nodeURL string, passphrase string) (*Client, error) {
+	client, err := NewClient(nodeURL)
+	if err == nil {
+		client.passphrase = passphrase
+	}
+	return client, err
 }
 
 // NewClientWithRetry creates a retryable new instance of Client with specified conflux node url and retry options.
@@ -287,7 +296,13 @@ func (client *Client) SendTransaction(tx types.UnsignedTransaction) (types.Hash,
 		return "", errors.New("account manager not specified, see SetAccountManager")
 	}
 
-	rawData, err := client.AccountManager.SignTransaction(tx)
+	var rawData []byte
+	if client.passphrase != "" {
+		rawData, err = client.AccountManager.SignAndEcodeTransactionWithPassphrase(tx, client.passphrase)
+	} else {
+		rawData, err = client.AccountManager.SignTransaction(tx)
+	}
+
 	if err != nil {
 		return "", errors.Wrap(err, "failed to sign transaction")
 	}
@@ -530,21 +545,43 @@ func (client *Client) GetBlockTrace(blockHash types.Hash) (trace *types.Localize
 	return
 }
 
-// CreateUnsignedTransaction creates an unsigned transaction by parameters,
-// and the other fields will be set to values fetched from conflux node.
-func (client *Client) CreateUnsignedTransaction(from types.Address, to types.Address, amount *hexutil.Big, data []byte) (types.UnsignedTransaction, error) {
-	tx := new(types.UnsignedTransaction)
+type TxContext struct {
+	Nonce        *hexutil.Big
+	GasPrice     *hexutil.Big
+	Gas          *hexutil.Big
+	EpochHeight  *hexutil.Uint64
+	ChainID      *hexutil.Uint
+	StorageLimit *hexutil.Uint64
+}
+
+func (client *Client) CreateUnsignedTransactionWithCtx(from types.Address, to types.Address, amount *hexutil.Big, data []byte, ctx *TxContext) (types.UnsignedTransaction, error) {
+	tx := types.UnsignedTransaction{}
 	tx.From = &from
 	tx.To = &to
 	tx.Value = amount
 	tx.Data = data
 
-	err := client.ApplyUnsignedTransactionDefault(tx)
-	if err != nil {
-		return types.UnsignedTransaction{}, errors.Wrap(err, errMsgApplyTxValues)
+	if ctx != nil {
+		tx.Nonce = ctx.Nonce
+		tx.GasPrice = ctx.GasPrice
+		tx.Gas = ctx.Gas
+		tx.EpochHeight = ctx.EpochHeight
+		tx.ChainID = ctx.ChainID
+		tx.StorageLimit = ctx.StorageLimit
 	}
 
-	return *tx, nil
+	err := client.ApplyUnsignedTransactionDefault(&tx)
+	if err != nil {
+		return tx, errors.Wrap(err, errMsgApplyTxValues)
+	}
+
+	return tx, nil
+}
+
+// CreateUnsignedTransaction creates an unsigned transaction by parameters,
+// and the other fields will be set to values fetched from conflux node.
+func (client *Client) CreateUnsignedTransaction(from types.Address, to types.Address, amount *hexutil.Big, data []byte) (types.UnsignedTransaction, error) {
+	return client.CreateUnsignedTransactionWithCtx(from, to, amount, data, nil)
 }
 
 // ApplyUnsignedTransactionDefault set empty fields to value fetched from conflux node.

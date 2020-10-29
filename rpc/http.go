@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -132,7 +133,12 @@ func DialHTTPWithClient(endpoint string, client *fasthttp.Client) (*Client, erro
 
 // DialHTTP creates a new RPC client that connects to an RPC server over HTTP.
 func DialHTTP(endpoint string) (*Client, error) {
-	return DialHTTPWithClient(endpoint, new(fasthttp.Client))
+	client := fasthttp.Client{
+		Dial: func(addr string) (net.Conn, error) {
+			return fasthttp.DialTimeout(addr, 15*time.Second)
+		},
+	}
+	return DialHTTPWithClient(endpoint, &client)
 }
 
 func (c *Client) sendHTTP(ctx context.Context, op *requestOp, msg interface{}) error {
