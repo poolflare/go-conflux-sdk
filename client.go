@@ -24,11 +24,20 @@ type Client struct {
 	nodeURL        string
 	rpcRequester   rpcRequester
 	accountManager AccountManagerOperator
+	passphrase     string
 }
 
 // NewClient creates a new instance of Client with specified conflux node url.
 func NewClient(nodeURL string) (*Client, error) {
 	client, err := NewClientWithRetry(nodeURL, 0, 0)
+	return client, err
+}
+
+func NewClientWithPassphrase(nodeURL string, passphrase string) (*Client, error) {
+	client, err := NewClient(nodeURL)
+	if err == nil {
+		client.passphrase = passphrase
+	}
 	return client, err
 }
 
@@ -439,7 +448,13 @@ func (client *Client) SendTransaction(tx *types.UnsignedTransaction) (types.Hash
 		return "", errors.New(msg)
 	}
 
-	rawData, err := client.accountManager.SignTransaction(*tx)
+	var rawData []byte
+	if client.passphrase != "" {
+		rawData, err = client.accountManager.SignAndEcodeTransactionWithPassphrase(*tx, client.passphrase)
+	} else {
+		rawData, err = client.accountManager.SignTransaction(*tx)
+	}
+
 	if err != nil {
 		msg := fmt.Sprintf("sign transaction {%+v} error", *tx)
 		return "", types.WrapError(err, msg)
