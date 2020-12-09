@@ -650,14 +650,30 @@ func (client *Client) GetTransactionReceipt(txHash types.Hash) (*types.Transacti
 	return &receipt, nil
 }
 
-// CreateUnsignedTransaction creates an unsigned transaction by parameters,
-// and the other fields will be set to values fetched from conflux node.
-func (client *Client) CreateUnsignedTransaction(from types.Address, to types.Address, amount *hexutil.Big, data []byte) (*types.UnsignedTransaction, error) {
+type TxContext struct {
+	Nonce        *hexutil.Big
+	GasPrice     *hexutil.Big
+	Gas          *hexutil.Big
+	EpochHeight  *hexutil.Uint64
+	ChainID      *hexutil.Uint
+	StorageLimit *hexutil.Uint64
+}
+
+func (client *Client) CreateUnsignedTransactionWithCtx(from types.Address, to types.Address, amount *hexutil.Big, data []byte, ctx *TxContext) (*types.UnsignedTransaction, error) {
 	tx := new(types.UnsignedTransaction)
 	tx.From = &from
 	tx.To = &to
 	tx.Value = amount
 	tx.Data = data
+
+	if ctx != nil {
+		tx.Nonce = ctx.Nonce
+		tx.GasPrice = ctx.GasPrice
+		tx.Gas = ctx.Gas
+		tx.EpochHeight = ctx.EpochHeight
+		tx.ChainID = ctx.ChainID
+		tx.StorageLimit = ctx.StorageLimit
+	}
 
 	err := client.ApplyUnsignedTransactionDefault(tx)
 	if err != nil {
@@ -666,6 +682,12 @@ func (client *Client) CreateUnsignedTransaction(from types.Address, to types.Add
 	}
 
 	return tx, nil
+}
+
+// CreateUnsignedTransaction creates an unsigned transaction by parameters,
+// and the other fields will be set to values fetched from conflux node.
+func (client *Client) CreateUnsignedTransaction(from types.Address, to types.Address, amount *hexutil.Big, data []byte) (*types.UnsignedTransaction, error) {
+	return client.CreateUnsignedTransactionWithCtx(from, to, amount, data, nil)
 }
 
 // ApplyUnsignedTransactionDefault set empty fields to value fetched from conflux node.
