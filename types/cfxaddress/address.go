@@ -289,12 +289,26 @@ func (a *Address) UnmarshalJSON(data []byte) error {
 	}
 
 	data = data[1 : len(data)-1]
+	addr := string(data)
 
-	addr, err := NewFromBase32(string(data))
-	if err != nil {
-		return errors.Wrapf(err, "failed to create address from base32 string %v", string(data))
+	var (
+		address Address
+		err     error
+	)
+
+	if addr[0:2] == "0x" {
+		address, err = NewFromHex(string(data))
+		if err != nil {
+			return errors.Wrapf(err, "failed to create address from hex string %v", addr)
+		}
+	} else {
+		address, err = NewFromBase32(string(data))
+		if err != nil {
+			return errors.Wrapf(err, "failed to create address from base32 string %v", addr)
+		}
 	}
-	*a = addr
+
+	*a = address
 	return nil
 }
 
